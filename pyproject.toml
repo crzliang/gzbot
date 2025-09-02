@@ -1,0 +1,8 @@
+[tool.nonebot]
+adapters = ["nonebot.adapters.onebot.v11"]
+plugins = ["bot.report"]
+
+[tool.poetry.dependencies]
+nonebot2 = "^2.0.0"
+nonebot-adapter-onebot = "^2.2.3"
+asyncpg = "^0.29.0"
