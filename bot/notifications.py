@@ -10,7 +10,13 @@ from enum import Enum
 from nonebot import require, get_driver
 from .config import POSTGRES_DSN, TARGET_GAME_ID, ALLOWED_GROUP_IDS
 from .database import get_recent_notices, get_challenge_info_by_name, get_game_title
-from .utils import format_blood_notification, decode_unicode_values, extract_challenge_name_from_values
+from         # 使用“上次检查到现在”的时间差作为查询窗口；若为0/负值则回退为默认间隔
+        window_seconds = int((now - last_checked_time).total_seconds())
+        if window_seconds <= 0 or window_seconds > NotificationConfig.CHECK_INTERVAL_SECONDS:
+            window_seconds = NotificationConfig.CHECK_INTERVAL_SECONDS
+
+        # 获取最近的新通知
+        rows = await get_recent_notices(int(TARGET_GAME_ID), seconds=window_seconds)mport format_blood_notification, decode_unicode_values, extract_challenge_name_from_values
 
 # 导入定时任务依赖
 require("nonebot_plugin_apscheduler")
@@ -49,12 +55,12 @@ def is_auto_broadcast_enabled() -> bool:
     return AUTO_BROADCAST_ENABLED
 
 def set_auto_broadcast_enabled(enabled: bool) -> None:
-    """设置自动播报开关；开启时刷新水位线避免回放历史"""
+    """设置自动播报开关"""
     global AUTO_BROADCAST_ENABLED, last_checked_time
     AUTO_BROADCAST_ENABLED = enabled
     if enabled:
-        # 开启时将水位线设置为当前，避免长窗口回放
-        last_checked_time = datetime.utcnow()
+        # 开启时获取系统当前时间作为水位线，确保从开启时刻开始查询
+        last_checked_time = datetime.now()
 
 
 def format_beijing_time(utc_time: datetime) -> str:
@@ -359,7 +365,8 @@ async def check_and_broadcast_notices() -> None:
             window_seconds = NotificationConfig.CHECK_INTERVAL_SECONDS
 
         # 获取最近的新通知
-        rows = await get_recent_notices(int(TARGET_GAME_ID), seconds=window_seconds)
+        # rows = await get_recent_notices(int(TARGET_GAME_ID), seconds=window_seconds)
+        rows = []  # 临时禁用查询最近通知的功能
         
         for row in rows:
             notice_id = row['Id']

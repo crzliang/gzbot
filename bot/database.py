@@ -6,7 +6,7 @@ from .config import POSTGRES_DSN, TARGET_GAME_ID
 
 
 async def get_game_title(game_id: int) -> str:
-    """根据游戏ID获取游戏标题"""
+    """根据赛事ID获取赛事标题"""
     conn = await asyncpg.connect(POSTGRES_DSN)
     try:
         game_record = await conn.fetchrow('SELECT "Title" FROM "Games" WHERE "Id" = $1', game_id)
@@ -137,7 +137,7 @@ async def get_game_rankings_by_stdnum_prefix(game_id: int, stdnum_prefix: str):
 
 
 async def get_recent_notices(game_id: int, seconds: int = 10):
-    """获取最近的游戏通知"""
+    """获取最近的赛事通知"""
     from datetime import datetime, timedelta
     
     conn = await asyncpg.connect(POSTGRES_DSN)

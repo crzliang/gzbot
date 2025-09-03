@@ -40,7 +40,7 @@ async def handle_gc(bot: Bot, event: Event):
         await gamechallenges.finish(error_msg)
 
     try:
-        # 获取游戏标题
+        # 获取赛事标题
         game_title = await get_game_title(int(TARGET_GAME_ID))
         
         # 获取题目列表
@@ -70,7 +70,7 @@ async def handle_rank(bot: Bot, event: Event):
         await rank.finish(error_msg)
 
     try:
-        # 获取游戏标题
+        # 获取赛事标题
         game_title = await get_game_title(int(TARGET_GAME_ID))
         
         # 获取排行榜数据
@@ -189,7 +189,7 @@ async def handle_rank_prefix(bot: Bot, event: Event):
     prefix_str = match.group(1)
     
     try:
-        # 获取游戏标题
+        # 获取赛事标题
         game_title = await get_game_title(int(TARGET_GAME_ID))
         
         # 获取按学号前缀过滤的排行榜数据
