@@ -34,48 +34,103 @@ async def get_game_rankings(game_id: int):
     """获取比赛排行榜"""
     conn = await asyncpg.connect(POSTGRES_DSN)
     try:
+        # 最简化的查询，只获取排名、团队名、总分和学号
         query = """
         WITH TeamScores AS (
             SELECT 
                 t."Name" as TeamName,
+                t."Id" as TeamId,
                 COALESCE(SUM(CASE 
                     WHEN s."Status" = 'Accepted'
                     THEN gc."OriginalScore"::integer
                     ELSE 0 
-                END), 0) as TotalScore,
-                -- 最后正确提交时间（用于排名）
-                MAX(CASE 
-                    WHEN s."Status" = 'Accepted'
-                    THEN s."SubmitTimeUtc" 
-                END) as LastAcceptedSubmission
+                END), 0) as TotalScore
             FROM "Participations" p
             INNER JOIN "Teams" t ON p."TeamId" = t."Id"
             LEFT JOIN "Submissions" s ON s."ParticipationId" = p."Id"
             LEFT JOIN "GameChallenges" gc ON s."ChallengeId" = gc."Id"
-            WHERE p."GameId" = $1 
-              AND p."Status" = 1  -- ParticipationStatus.Accepted
-            GROUP BY t."Name"
+            WHERE p."GameId" = $1 AND p."Status" = 1
+            GROUP BY t."Name", t."Id"
             HAVING SUM(CASE WHEN s."Status" = 'Accepted' THEN gc."OriginalScore"::integer ELSE 0 END) > 0
         ),
         RankedTeams AS (
             SELECT 
                 TeamName,
+                TeamId,
                 TotalScore,
-                ROW_NUMBER() OVER (
-                    ORDER BY TotalScore DESC, 
-                             LastAcceptedSubmission ASC NULLS LAST,
-                             TeamName ASC
-                ) as Rank
+                ROW_NUMBER() OVER (ORDER BY TotalScore DESC, TeamName ASC) as Rank
             FROM TeamScores
         )
         SELECT 
-            Rank,
-            TeamName,
-            TotalScore
-        FROM RankedTeams
-        ORDER BY Rank;
+            rt.Rank,
+            rt.TeamName,
+            rt.TotalScore,
+            STRING_AGG(u."StdNumber", ', ') as StudentNumbers
+        FROM RankedTeams rt
+        INNER JOIN "Participations" p ON p."TeamId" = rt.TeamId AND p."GameId" = $1
+        INNER JOIN "UserParticipations" up ON up."ParticipationId" = p."Id"
+        INNER JOIN "AspNetUsers" u ON u."Id" = up."UserId"
+        GROUP BY rt.Rank, rt.TeamName, rt.TotalScore
+        ORDER BY rt.Rank;
         """
         rows = await conn.fetch(query, game_id)
+        return rows
+    finally:
+        await conn.close()
+
+
+async def get_game_rankings_by_stdnum_prefix(game_id: int, stdnum_prefix: str):
+    """获取按学号前缀过滤的比赛排行榜"""
+    conn = await asyncpg.connect(POSTGRES_DSN)
+    try:
+        # 查询指定学号前缀的队伍排行榜
+        query = """
+        WITH TeamScores AS (
+            SELECT 
+                t."Name" as TeamName,
+                t."Id" as TeamId,
+                COALESCE(SUM(CASE 
+                    WHEN s."Status" = 'Accepted'
+                    THEN gc."OriginalScore"::integer
+                    ELSE 0 
+                END), 0) as TotalScore
+            FROM "Participations" p
+            INNER JOIN "Teams" t ON p."TeamId" = t."Id"
+            LEFT JOIN "Submissions" s ON s."ParticipationId" = p."Id"
+            LEFT JOIN "GameChallenges" gc ON s."ChallengeId" = gc."Id"
+            WHERE p."GameId" = $1 AND p."Status" = 1
+            GROUP BY t."Name", t."Id"
+            HAVING SUM(CASE WHEN s."Status" = 'Accepted' THEN gc."OriginalScore"::integer ELSE 0 END) > 0
+        ),
+        FilteredTeams AS (
+            SELECT DISTINCT ts.TeamId, ts.TeamName, ts.TotalScore
+            FROM TeamScores ts
+            INNER JOIN "Participations" p ON p."TeamId" = ts.TeamId AND p."GameId" = $1
+            INNER JOIN "UserParticipations" up ON up."ParticipationId" = p."Id"
+            INNER JOIN "AspNetUsers" u ON u."Id" = up."UserId"
+            WHERE u."StdNumber" LIKE $2 || '%'
+        ),
+        RankedTeams AS (
+            SELECT 
+                TeamName,
+                TeamId,
+                TotalScore,
+                ROW_NUMBER() OVER (ORDER BY TotalScore DESC, TeamName ASC) as Rank
+            FROM FilteredTeams
+        )
+        SELECT 
+            rt.Rank,
+            rt.TeamName,
+            rt.TotalScore,
+            STRING_AGG(u."StdNumber", ', ') as StudentNumbers
+        FROM RankedTeams rt
+        INNER JOIN "Participations" p ON p."TeamId" = rt.TeamId AND p."GameId" = $1
+        INNER JOIN "UserParticipations" up ON up."ParticipationId" = p."Id"
+        INNER JOIN "AspNetUsers" u ON u."Id" = up."UserId"
+        GROUP BY rt.Rank, rt.TeamName, rt.TotalScore
+        ORDER BY rt.Rank;
+        """
+        rows = await conn.fetch(query, game_id, stdnum_prefix)
         return rows
     finally:
         await conn.close()

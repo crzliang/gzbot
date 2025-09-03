@@ -132,8 +132,9 @@ def format_ranking_message(game_title: str, ranking_data):
         elif rank_num == 3:
             emoji = "🥉"
         else:
-            emoji = f"{rank_num}."
+            emoji = f" {rank_num} "
         
+        # 只显示队伍名和分数，不显示学号
         text_lines.append(f"{emoji} {team_name} -- {score}分")
     
     return "\n".join(text_lines)
