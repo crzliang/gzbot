@@ -1,0 +1,9 @@
+# Generated from pyproject.toml [tool.poetry.dependencies]
+nonebot2>=2.0.0,<3.0.0
+nonebot-adapter-onebot>=2.2.3,<3.0.0
+asyncpg>=0.29.0,<1.0.0
+nonebot-plugin-apscheduler>=0.4.0,<1.0.0
+
+# Runtime deps used by app.py
+uvicorn>=0.23.0,<1.0.0
+python-dotenv>=1.0.0,<2.0.0
