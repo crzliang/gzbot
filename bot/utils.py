@@ -276,22 +276,22 @@ async def validate_command_prerequisites(command_name: str, event: Event) -> Opt
     """
     from .config import POSTGRES_DSN, TARGET_GAME_ID
     
-    logger.debug(f"{command_name} command triggered by {event.get_user_id()}")
+    # debug logs removed
     
     # 权限检查
     if not check_group_permission(event):
-        logger.debug(f"Command blocked - group_id: {getattr(event, 'group_id', None)}")
+    # debug logs removed
         return "PERMISSION_DENIED"  # 特殊标记，表示权限被拒绝
     
     # 配置检查
     if not POSTGRES_DSN:
-        logger.debug("POSTGRES_DSN not configured")
+    # debug logs removed
         return "未配置 POSTGRES_DSN。"
     
     if not TARGET_GAME_ID:
         return "未在 .env 文件中设置 TARGET_GAME_ID。"
     
-    logger.debug(f"Connecting to database: {POSTGRES_DSN}")
+    # debug logs removed
     return None
 
 
@@ -305,8 +305,7 @@ async def send_response(bot: Bot, event: Event, message: str, command_name: str)
         command_name: 命令名称
     """
     try:
-        await bot.send(event, message)
-        logger.debug(f"{command_name} message sent successfully")
+    await bot.send(event, message)
     except Exception as e:
         logger.error(f"Failed to send {command_name} message: {e}")
         raise
@@ -321,7 +320,7 @@ def log_command_result(command_name: str, game_id: int, result_count: int, data_
         result_count: 结果数量
         data_type: 数据类型描述
     """
-    logger.debug(f"{command_name} query for GameId={game_id} returned {result_count} {data_type}")
+    # debug logs removed
 
 
 def log_database_error(command_name: str, error: Exception) -> None:

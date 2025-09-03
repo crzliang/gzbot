@@ -215,7 +215,7 @@ async def get_challenge_info_by_name(game_id: int, challenge_name: str):
             except json.JSONDecodeError:
                 pass  # 如果解析失败，使用原始名称
         
-        print(f"DEBUG: Looking for challenge: original='{challenge_name}', processed='{actual_challenge_name}'")
+        
         
         result = await conn.fetchrow(query, game_id, actual_challenge_name)
         return result

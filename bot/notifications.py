@@ -313,7 +313,6 @@ async def _broadcast_to_groups(message: str, notice_id: int) -> None:
             try:
                 await bot.send_group_msg(group_id=group_id, message=message)
                 success_count += 1
-                logger.debug(f"Successfully broadcast notice {notice_id} to group {group_id}")
             except Exception as e:
                 logger.error(f"Failed to broadcast to group {group_id}: {e}")
     
@@ -326,12 +325,11 @@ async def check_and_broadcast_notices() -> None:
         logger.warning("Auto broadcast not configured properly")
         return
     
-    logger.debug("Checking for new notices...")
+    # debug logs removed
     
     try:
         # 获取最近的新通知
-        rows = await get_recent_notices(int(TARGET_GAME_ID), seconds=NotificationConfig.CHECK_INTERVAL_SECONDS)
-        logger.debug(f"Found {len(rows)} new notices in last {NotificationConfig.CHECK_INTERVAL_SECONDS} seconds")
+    rows = await get_recent_notices(int(TARGET_GAME_ID), seconds=NotificationConfig.CHECK_INTERVAL_SECONDS)
         
         for row in rows:
             notice_id = row['Id']
