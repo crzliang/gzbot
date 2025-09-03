@@ -28,7 +28,7 @@ async def handle_gc(bot: Bot, event: Event):
     # 限制：如果设置了 ALLOWED_GROUP_IDS，则仅允许来自这些群的 GroupMessageEvent
     if not check_group_permission(event):
         print(f"DEBUG: Command blocked - group_id: {getattr(event, 'group_id', None)}, allowed: {ALLOWED_GROUP_IDS}")
-        await gamechallenges.finish("此命令仅在指定群聊内可用。")
+        return  # 静默处理，不发送任何消息
 
     if not POSTGRES_DSN:
         print("DEBUG: POSTGRES_DSN not configured")
@@ -71,7 +71,7 @@ async def handle_rank(bot: Bot, event: Event):
     # 限制：如果设置了 ALLOWED_GROUP_IDS，则仅允许来自这些群的 GroupMessageEvent
     if not check_group_permission(event):
         print(f"DEBUG: Command blocked - group_id: {getattr(event, 'group_id', None)}, allowed: {ALLOWED_GROUP_IDS}")
-        await rank.finish("此命令仅在指定群聊内可用。")
+        return  # 静默处理，不发送任何消息
 
     if not POSTGRES_DSN:
         print("DEBUG: POSTGRES_DSN not configured")
