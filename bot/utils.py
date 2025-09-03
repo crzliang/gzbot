@@ -280,12 +280,10 @@ async def validate_command_prerequisites(command_name: str, event: Event) -> Opt
     
     # 权限检查
     if not check_group_permission(event):
-    # debug logs removed
         return "PERMISSION_DENIED"  # 特殊标记，表示权限被拒绝
     
     # 配置检查
     if not POSTGRES_DSN:
-    # debug logs removed
         return "未配置 POSTGRES_DSN。"
     
     if not TARGET_GAME_ID:
@@ -305,7 +303,7 @@ async def send_response(bot: Bot, event: Event, message: str, command_name: str)
         command_name: 命令名称
     """
     try:
-    await bot.send(event, message)
+        await bot.send(event, message)
     except Exception as e:
         logger.error(f"Failed to send {command_name} message: {e}")
         raise

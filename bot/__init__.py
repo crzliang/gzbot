@@ -1,9 +1,6 @@
 from nonebot import get_driver
-from nonebot.plugin import require
 
-require("bot.main")
-
-# 可以在这里添加更多插件
+# 这里无需 require 其它模块，app.py 会通过 nonebot.load_plugins("bot") 加载本目录下的所有插件文件
 
 driver = get_driver()
 

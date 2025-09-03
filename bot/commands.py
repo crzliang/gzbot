@@ -14,12 +14,16 @@ from .utils import (
     log_command_result, 
     log_database_error
 )
+from .notifications import set_auto_broadcast_enabled, is_auto_broadcast_enabled
 
 
 # 定义命令触发
 gamechallenges = on_command("gamechallenges", aliases={"gc"}, priority=5)
 rank = on_command("rank", priority=5)
 help_command = on_command("help", priority=5)
+# 自动播报控制命令
+open_broadcast = on_command("open", priority=5)
+close_broadcast = on_command("close", priority=5)
 # 使用正则表达式匹配 rank-xx 格式的命令（仅两位数字）
 rank_prefix = on_regex(r'^/rank-(\d{2})$', priority=4)
 
@@ -101,6 +105,11 @@ async def handle_help(bot: Bot, event: Event):
 • /rank - 查看排行榜
 • /rank-XX - 查看指定级别排行榜（如：/rank-25）
 
+• /open - 开启自动播报(一血、二血、三血、上新题、题目加提示、赛事公告)
+• /close - 关闭自动播报(一血、二血、三血、上新题、题目加提示、赛事公告)
+
+注意：自动播报默认关闭，请使用 /open 开启，/close 关闭。
+
 如有问题，请联系管理员。
     """.strip()
     
@@ -108,6 +117,40 @@ async def handle_help(bot: Bot, event: Event):
         await send_response(bot, event, help_text, "help")
     except Exception as e:
         log_database_error("help", e)
+
+
+@open_broadcast.handle()
+async def handle_open_broadcast(bot: Bot, event: Event):
+    """开启自动播报"""
+    # 只做权限检查
+    error_msg = await validate_command_prerequisites("open", event)
+    if error_msg == "PERMISSION_DENIED":
+        return
+    try:
+        if is_auto_broadcast_enabled():
+            await send_response(bot, event, "自动播报已是开启状态。", "open")
+            return
+        set_auto_broadcast_enabled(True)
+        await send_response(bot, event, "已开启自动播报。", "open")
+    except Exception as e:
+        log_database_error("open", e)
+
+
+@close_broadcast.handle()
+async def handle_close_broadcast(bot: Bot, event: Event):
+    """关闭自动播报"""
+    # 只做权限检查
+    error_msg = await validate_command_prerequisites("close", event)
+    if error_msg == "PERMISSION_DENIED":
+        return
+    try:
+        if not is_auto_broadcast_enabled():
+            await send_response(bot, event, "自动播报已是关闭状态。", "close")
+            return
+        set_auto_broadcast_enabled(False)
+        await send_response(bot, event, "已关闭自动播报。", "close")
+    except Exception as e:
+        log_database_error("close", e)
 
 
 @rank_prefix.handle()

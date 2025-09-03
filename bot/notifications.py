@@ -39,6 +39,22 @@ class NotificationConfig:
 
 # 存储已播报的通知ID，避免重复播报
 broadcasted_notices: Set[int] = set()
+# 冷启动水位线：记录上次检查的时间，避免重启回放历史通知
+last_checked_time: Optional[datetime] = None
+# 自动播报开关（默认开启）
+AUTO_BROADCAST_ENABLED: bool = False
+
+def is_auto_broadcast_enabled() -> bool:
+    """获取自动播报开关状态"""
+    return AUTO_BROADCAST_ENABLED
+
+def set_auto_broadcast_enabled(enabled: bool) -> None:
+    """设置自动播报开关；开启时刷新水位线避免回放历史"""
+    global AUTO_BROADCAST_ENABLED, last_checked_time
+    AUTO_BROADCAST_ENABLED = enabled
+    if enabled:
+        # 开启时将水位线设置为当前，避免长窗口回放
+        last_checked_time = datetime.utcnow()
 
 
 def format_beijing_time(utc_time: datetime) -> str:
@@ -325,11 +341,25 @@ async def check_and_broadcast_notices() -> None:
         logger.warning("Auto broadcast not configured properly")
         return
     
-    # debug logs removed
+    # 若开关关闭，则跳过
+    if not is_auto_broadcast_enabled():
+        return
     
     try:
+        # 冷启动保护：首次运行仅记录当前时间，不进行播报，避免回放历史
+        global last_checked_time
+        now = datetime.utcnow()
+        if last_checked_time is None:
+            last_checked_time = now
+            return
+
+        # 使用“上次检查到现在”的时间差作为查询窗口；若为0/负值则回退为默认间隔
+        window_seconds = int((now - last_checked_time).total_seconds())
+        if window_seconds <= 0:
+            window_seconds = NotificationConfig.CHECK_INTERVAL_SECONDS
+
         # 获取最近的新通知
-    rows = await get_recent_notices(int(TARGET_GAME_ID), seconds=NotificationConfig.CHECK_INTERVAL_SECONDS)
+        rows = await get_recent_notices(int(TARGET_GAME_ID), seconds=window_seconds)
         
         for row in rows:
             notice_id = row['Id']
@@ -359,6 +389,9 @@ async def check_and_broadcast_notices() -> None:
             
             # 标记为已播报
             broadcasted_notices.add(notice_id)
+        
+        # 更新水位线为本次检查时间
+        last_checked_time = now
         
         # 清理过期记录
         _cleanup_broadcasted_notices()
