@@ -36,42 +36,67 @@ async def get_game_rankings(game_id: int):
     try:
         # 最简化的查询，只获取排名、团队名、总分和学号
         query = """
-        WITH TeamScores AS (
-            SELECT 
-                t."Name" as TeamName,
-                t."Id" as TeamId,
-                COALESCE(SUM(CASE 
-                    WHEN s."Status" = 'Accepted'
-                    THEN gc."OriginalScore"::integer
-                    ELSE 0 
-                END), 0) as TotalScore
-            FROM "Participations" p
-            INNER JOIN "Teams" t ON p."TeamId" = t."Id"
-            LEFT JOIN "Submissions" s ON s."ParticipationId" = p."Id"
-            LEFT JOIN "GameChallenges" gc ON s."ChallengeId" = gc."Id"
-            WHERE p."GameId" = $1 AND p."Status" = 1
-            GROUP BY t."Name", t."Id"
-            HAVING SUM(CASE WHEN s."Status" = 'Accepted' THEN gc."OriginalScore"::integer ELSE 0 END) > 0
+        -- 按每队每题只计一次（取最早 Accepted），同分时按最后被记分时间升序排列（越早越靠前）
+        WITH first_accept_per_part AS (
+            SELECT
+                s."ParticipationId",
+                s."ChallengeId",
+                MIN(s."SubmitTimeUtc") AS first_time
+            FROM "Submissions" s
+            WHERE s."GameId" = $1
+            AND s."Status" = 'Accepted'
+            GROUP BY s."ParticipationId", s."ChallengeId"
         ),
-        RankedTeams AS (
-            SELECT 
-                TeamName,
-                TeamId,
-                TotalScore,
-                ROW_NUMBER() OVER (ORDER BY TotalScore DESC, TeamName ASC) as Rank
-            FROM TeamScores
+        accepted_per_team AS (
+            SELECT
+                p."TeamId",
+                f."ChallengeId",
+                f.first_time
+            FROM "Participations" p
+            JOIN first_accept_per_part f ON f."ParticipationId" = p."Id"
+            WHERE p."GameId" = $1
+            AND p."Status" = 1
+        ),
+        team_scores AS (
+            SELECT
+                t."Name" AS teamname,
+                t."Id" AS teamid,
+                COALESCE(SUM(gc."OriginalScore"::integer), 0) AS totalscore,
+                -- 团队的最后被记分时间：所有被记分题目的最晚 first_time
+                MAX(apt.first_time) AS lastacceptedsubmission
+            FROM "Teams" t
+            JOIN "Participations" p ON p."TeamId" = t."Id" AND p."GameId" = $1 AND p."Status" = 1
+            LEFT JOIN (
+                SELECT DISTINCT "TeamId", "ChallengeId", first_time FROM accepted_per_team
+            ) apt ON apt."TeamId" = t."Id"
+            LEFT JOIN "GameChallenges" gc ON gc."Id" = apt."ChallengeId"
+            GROUP BY t."Name", t."Id"
+            HAVING SUM(COALESCE(gc."OriginalScore"::integer, 0)) > 0
+        ),
+        ranked_teams AS (
+            SELECT
+                teamname,
+                teamid,
+                totalscore,
+                lastacceptedsubmission,
+                ROW_NUMBER() OVER (
+                    ORDER BY totalscore DESC,
+                            lastacceptedsubmission ASC NULLS LAST,
+                            teamname ASC
+                ) AS rank
+            FROM team_scores
         )
-        SELECT 
-            rt.Rank,
-            rt.TeamName,
-            rt.TotalScore,
-            STRING_AGG(u."StdNumber", ', ') as StudentNumbers
-        FROM RankedTeams rt
-        INNER JOIN "Participations" p ON p."TeamId" = rt.TeamId AND p."GameId" = $1
-        INNER JOIN "UserParticipations" up ON up."ParticipationId" = p."Id"
-        INNER JOIN "AspNetUsers" u ON u."Id" = up."UserId"
-        GROUP BY rt.Rank, rt.TeamName, rt.TotalScore
-        ORDER BY rt.Rank;
+        SELECT
+            rt.rank,
+            rt.teamname,
+            rt.totalscore,
+            STRING_AGG(DISTINCT u."StdNumber", ', ' ORDER BY u."StdNumber") AS studentnumbers
+        FROM ranked_teams rt
+        JOIN "Participations" p ON p."TeamId" = rt.teamid AND p."GameId" = $1
+        JOIN "UserParticipations" up ON up."ParticipationId" = p."Id"
+        JOIN "AspNetUsers" u ON u."Id" = up."UserId"
+        GROUP BY rt.rank, rt.teamname, rt.totalscore, rt.lastacceptedsubmission
+        ORDER BY rt.rank;
         """
         rows = await conn.fetch(query, game_id)
         return rows
@@ -85,50 +110,88 @@ async def get_game_rankings_by_stdnum_prefix(game_id: int, stdnum_prefix: str):
     try:
         # 查询指定学号前缀的队伍排行榜
         query = """
-        WITH TeamScores AS (
-            SELECT 
-                t."Name" as TeamName,
-                t."Id" as TeamId,
-                COALESCE(SUM(CASE 
-                    WHEN s."Status" = 'Accepted'
-                    THEN gc."OriginalScore"::integer
-                    ELSE 0 
-                END), 0) as TotalScore
-            FROM "Participations" p
-            INNER JOIN "Teams" t ON p."TeamId" = t."Id"
-            LEFT JOIN "Submissions" s ON s."ParticipationId" = p."Id"
-            LEFT JOIN "GameChallenges" gc ON s."ChallengeId" = gc."Id"
-            WHERE p."GameId" = $1 AND p."Status" = 1
+        WITH first_accept_per_part AS (
+            -- 每个参与(Participation)对每题的最早 Accepted
+            SELECT
+                s."ParticipationId",
+                s."ChallengeId",
+                MIN(s."SubmitTimeUtc") AS first_time
+            FROM "Submissions" s
+            WHERE s."GameId" = $1
+            AND s."Status" = 'Accepted'
+            GROUP BY s."ParticipationId", s."ChallengeId"
+        ),
+        accepted_per_team_raw AS (
+            -- 关联到队伍，仅统计已被接受的参赛资格
+            SELECT
+                p."TeamId",
+                f."ChallengeId",
+                f.first_time
+            FROM first_accept_per_part f
+            JOIN "Participations" p ON p."Id" = f."ParticipationId"
+            WHERE p."GameId" = $1
+            AND p."Status" = 1
+        ),
+        accepted_per_team AS (
+            -- 防御性去重（同队同题合并为一次，取最早时间）
+            SELECT
+                "TeamId",
+                "ChallengeId",
+                MIN(first_time) AS first_time
+            FROM accepted_per_team_raw
+            GROUP BY "TeamId", "ChallengeId"
+        ),
+        team_scores AS (
+            -- 计算总分与最后一次被记分时间（用于同分排序）
+            SELECT
+                t."Name" AS teamname,
+                t."Id"   AS teamid,
+                COALESCE(SUM(gc."OriginalScore"::integer), 0) AS totalscore,
+                MAX(a.first_time) AS lastacceptedsubmission
+            FROM "Teams" t
+            JOIN "Participations" p ON p."TeamId" = t."Id" AND p."GameId" = $1 AND p."Status" = 1
+            LEFT JOIN accepted_per_team a ON a."TeamId" = t."Id"
+            LEFT JOIN "GameChallenges" gc ON gc."Id" = a."ChallengeId" AND gc."GameId" = $1
             GROUP BY t."Name", t."Id"
-            HAVING SUM(CASE WHEN s."Status" = 'Accepted' THEN gc."OriginalScore"::integer ELSE 0 END) > 0
+            HAVING SUM(COALESCE(gc."OriginalScore"::integer, 0)) > 0
         ),
-        FilteredTeams AS (
-            SELECT DISTINCT ts.TeamId, ts.TeamName, ts.TotalScore
-            FROM TeamScores ts
-            INNER JOIN "Participations" p ON p."TeamId" = ts.TeamId AND p."GameId" = $1
-            INNER JOIN "UserParticipations" up ON up."ParticipationId" = p."Id"
-            INNER JOIN "AspNetUsers" u ON u."Id" = up."UserId"
-            WHERE u."StdNumber" LIKE $2 || '%'
+        filtered_teams AS (
+            -- 按学号前缀过滤队伍（任一成员命中即可）
+            SELECT DISTINCT
+                ts.teamid,
+                ts.teamname,
+                ts.totalscore,
+                ts.lastacceptedsubmission
+            FROM team_scores ts
+            JOIN "Participations" p ON p."TeamId" = ts.teamid AND p."GameId" = $1
+            JOIN "UserParticipations" up ON up."ParticipationId" = p."Id"
+            JOIN "AspNetUsers" u ON u."Id" = up."UserId"
+            WHERE u."StdNumber" LIKE ($2 || '%')
         ),
-        RankedTeams AS (
-            SELECT 
-                TeamName,
-                TeamId,
-                TotalScore,
-                ROW_NUMBER() OVER (ORDER BY TotalScore DESC, TeamName ASC) as Rank
-            FROM FilteredTeams
+        ranked_teams AS (
+            SELECT
+                teamname,
+                teamid,
+                totalscore,
+                lastacceptedsubmission,
+                ROW_NUMBER() OVER (
+                    ORDER BY totalscore DESC,
+                            lastacceptedsubmission ASC NULLS LAST,
+                            teamname ASC
+                ) AS rank
+            FROM filtered_teams
         )
-        SELECT 
-            rt.Rank,
-            rt.TeamName,
-            rt.TotalScore,
-            STRING_AGG(u."StdNumber", ', ') as StudentNumbers
-        FROM RankedTeams rt
-        INNER JOIN "Participations" p ON p."TeamId" = rt.TeamId AND p."GameId" = $1
-        INNER JOIN "UserParticipations" up ON up."ParticipationId" = p."Id"
-        INNER JOIN "AspNetUsers" u ON u."Id" = up."UserId"
-        GROUP BY rt.Rank, rt.TeamName, rt.TotalScore
-        ORDER BY rt.Rank;
+        SELECT
+            rt.rank,
+            rt.teamname,
+            rt.totalscore,
+            STRING_AGG(DISTINCT u."StdNumber", ', ' ORDER BY u."StdNumber") AS studentnumbers
+        FROM ranked_teams rt
+        JOIN "Participations" p ON p."TeamId" = rt.teamid AND p."GameId" = $1
+        JOIN "UserParticipations" up ON up."ParticipationId" = p."Id"
+        JOIN "AspNetUsers" u ON u."Id" = up."UserId"
+        GROUP BY rt.rank, rt.teamname, rt.totalscore, rt.lastacceptedsubmission
+        ORDER BY rt.rank;
         """
         rows = await conn.fetch(query, game_id, stdnum_prefix)
         return rows
