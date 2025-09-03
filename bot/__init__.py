@@ -1,7 +1,7 @@
 from nonebot import get_driver
 from nonebot.plugin import require
 
-require("bot.report")
+require("bot.main")
 
 # 可以在这里添加更多插件
 
