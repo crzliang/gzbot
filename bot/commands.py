@@ -12,6 +12,7 @@ from .utils import format_challenges_message, format_ranking_message
 # 定义命令触发
 gamechallenges = on_command("gamechallenges", aliases={"gc"}, priority=5)
 rank = on_command("rank", priority=5)
+help_command = on_command("help", priority=5)
 # 使用正则表达式匹配 rank-xx 格式的命令
 rank_prefix = on_regex(r'^/rank-(\d+)$', priority=4)
 
@@ -64,7 +65,7 @@ async def handle_gc(bot: Bot, event: Event):
         
     except Exception as e:
         print(f"DEBUG: Database error: {e}")
-        await gamechallenges.finish(f"查询失败: {e}")
+        await gamechallenges.finish(f"查询失败！")
 
 
 @rank.handle()
@@ -107,7 +108,34 @@ async def handle_rank(bot: Bot, event: Event):
         
     except Exception as e:
         print(f"DEBUG: Rank database error: {e}")
-        await rank.finish(f"查询排行榜失败: {e}")
+        await rank.finish(f"查询排行榜失败！")
+
+
+@help_command.handle()
+async def handle_help(bot: Bot, event: Event):
+    """处理帮助命令"""
+    print(f"DEBUG: help command triggered by {event.get_user_id()}")
+    
+    # 权限检查
+    if not check_group_permission(event):
+        print(f"DEBUG: Help command blocked - group_id: {getattr(event, 'group_id', None)}, allowed: {ALLOWED_GROUP_IDS}")
+        return  # 静默处理，不发送任何消息
+
+    help_text = """
+可用命令：
+• /help - 显示此帮助信息
+• /gc 或 /gamechallenges - 查看比赛题目列表
+• /rank - 查看排行榜
+• /rank-XX - 查看指定级别排行榜（如：/rank-25）
+
+如有问题，请联系管理员。
+    """.strip()
+    
+    try:
+        await bot.send(event, help_text)
+        print("DEBUG: Help message sent successfully")
+    except Exception as e:
+        print(f"DEBUG: Failed to send help message: {e}")
 
 
 @rank_prefix.handle()
@@ -149,7 +177,7 @@ async def handle_rank_prefix(bot: Bot, event: Event):
         
         if not ranking_data:
             print("DEBUG: No ranking data found for prefix")
-            await rank_prefix.finish(f"比赛 '{game_title}' 中未找到学号前缀为 '{prefix_str}' 的队伍。")
+            await rank_prefix.finish(f"'{game_title}' 赛事中未找到{prefix_str}级的队伍。")
         
         # 格式化并发送消息，标题包含前缀信息
         text = format_ranking_message(f"{game_title} - {prefix_str} 级", ranking_data)
@@ -160,4 +188,4 @@ async def handle_rank_prefix(bot: Bot, event: Event):
         
     except Exception as e:
         print(f"DEBUG: Rank-prefix database error: {e}")
-        await rank_prefix.finish(f"查询排行榜失败: {e}")
+        await rank_prefix.finish(f"查询排行榜失败！")
