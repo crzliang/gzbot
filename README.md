@@ -64,6 +64,26 @@ python app.py
 
 OneBot v11 连接方式（例如 go-cqhttp）请按各自文档配置上报与反向 WS/HTTP（确保与本服务监听一致）。
 
+### 使用 Docker 运行
+已提供 `Dockerfile`，也可直接使用 GitHub Packages (ghcr.io) 发布的镜像。
+
+构建（本地）：
+```bash
+docker build -t ghcr.io/<owner>/<repo>:dev .
+```
+
+运行：
+```bash
+docker run --rm -p 8080:8080 \
+	-e POSTGRES_DSN=postgresql://user:pass@host:5432/db \
+	-e TARGET_GAME_ID=1 \
+	-e ALLOWED_GROUP_IDS=123456 \
+	-e ADMIN_QQ_IDS=111111 \
+	ghcr.io/<owner>/<repo>:dev
+```
+
+GitHub Actions 会在推送到 master 时自动构建并推送镜像到 ghcr.io，镜像名为 `ghcr.io/<owner>/<repo>:<tag>`。
+
 ## 常用指令
 - /help
 - /gc 或 /gamechallenges
