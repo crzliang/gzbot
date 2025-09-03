@@ -1,11 +1,12 @@
 """
 工具函数模块
-提供Unicode解码、通知格式化、消息格式化等通用功能
+提供Unicode解码、通知格式化、消息格式化、命令处理等通用功能
 """
 import json
 import codecs
 import logging
 from typing import Any, Dict, List, Optional, Union
+from nonebot.adapters.onebot.v11 import Bot, Event, GroupMessageEvent
 
 logger = logging.getLogger(__name__)
 
@@ -242,3 +243,92 @@ def format_ranking_message(game_title: str, ranking_data: List[Dict[str, Any]]) 
         text_lines.append(f"{emoji} {team_name} -- {score}分")
     
     return "\n".join(text_lines)
+
+
+# ==================== 命令处理工具函数 ====================
+
+def check_group_permission(event: Event) -> bool:
+    """检查群组权限
+    
+    Args:
+        event: 事件对象
+        
+    Returns:
+        是否有权限
+    """
+    from .config import ALLOWED_GROUP_IDS
+    
+    if ALLOWED_GROUP_IDS:
+        if not isinstance(event, GroupMessageEvent) or getattr(event, "group_id", None) not in ALLOWED_GROUP_IDS:
+            return False
+    return True
+
+
+async def validate_command_prerequisites(command_name: str, event: Event) -> Optional[str]:
+    """验证命令执行的先决条件
+    
+    Args:
+        command_name: 命令名称
+        event: 事件对象
+        
+    Returns:
+        如果有错误返回错误消息，否则返回None
+    """
+    from .config import POSTGRES_DSN, TARGET_GAME_ID
+    
+    logger.debug(f"{command_name} command triggered by {event.get_user_id()}")
+    
+    # 权限检查
+    if not check_group_permission(event):
+        logger.debug(f"Command blocked - group_id: {getattr(event, 'group_id', None)}")
+        return "PERMISSION_DENIED"  # 特殊标记，表示权限被拒绝
+    
+    # 配置检查
+    if not POSTGRES_DSN:
+        logger.debug("POSTGRES_DSN not configured")
+        return "未配置 POSTGRES_DSN。"
+    
+    if not TARGET_GAME_ID:
+        return "未在 .env 文件中设置 TARGET_GAME_ID。"
+    
+    logger.debug(f"Connecting to database: {POSTGRES_DSN}")
+    return None
+
+
+async def send_response(bot: Bot, event: Event, message: str, command_name: str) -> None:
+    """发送响应消息
+    
+    Args:
+        bot: 机器人实例
+        event: 事件对象
+        message: 要发送的消息
+        command_name: 命令名称
+    """
+    try:
+        await bot.send(event, message)
+        logger.debug(f"{command_name} message sent successfully")
+    except Exception as e:
+        logger.error(f"Failed to send {command_name} message: {e}")
+        raise
+
+
+def log_command_result(command_name: str, game_id: int, result_count: int, data_type: str = "items") -> None:
+    """记录命令执行结果
+    
+    Args:
+        command_name: 命令名称
+        game_id: 赛事ID
+        result_count: 结果数量
+        data_type: 数据类型描述
+    """
+    logger.debug(f"{command_name} query for GameId={game_id} returned {result_count} {data_type}")
+
+
+def log_database_error(command_name: str, error: Exception) -> None:
+    """记录数据库错误
+    
+    Args:
+        command_name: 命令名称
+        error: 异常对象
+    """
+    logger.error(f"{command_name} database error: {error}")
