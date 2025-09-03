@@ -264,6 +264,24 @@ def check_group_permission(event: Event) -> bool:
     return True
 
 
+def check_admin_permission(event: Event) -> bool:
+    """检查管理员权限
+    
+    Args:
+        event: 事件对象
+        
+    Returns:
+        是否有管理员权限
+    """
+    from .config import ADMIN_QQ_IDS
+    
+    if ADMIN_QQ_IDS:
+        user_id = getattr(event, "user_id", None)
+        if user_id is None or user_id not in ADMIN_QQ_IDS:
+            return False
+    return True
+
+
 async def validate_command_prerequisites(command_name: str, event: Event) -> Optional[str]:
     """验证命令执行的先决条件
     

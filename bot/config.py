@@ -18,6 +18,15 @@ if ALLOWED_GROUP_IDS_RAW:
 # 从 .env 文件读取要监听的比赛 ID
 TARGET_GAME_ID = os.getenv("TARGET_GAME_ID")
 
+# 管理员 QQ 号，逗号分隔；为空表示不限制
+ADMIN_QQ_IDS_RAW = os.getenv("ADMIN_QQ_IDS", "")
+ADMIN_QQ_IDS = set()
+if ADMIN_QQ_IDS_RAW:
+    try:
+        ADMIN_QQ_IDS = set(int(x.strip()) for x in ADMIN_QQ_IDS_RAW.split(",") if x.strip())
+    except Exception:
+        ADMIN_QQ_IDS = set()
+
 # Category 数字到名称的映射
 CATEGORY_MAPPING = {
     0: "Misc",

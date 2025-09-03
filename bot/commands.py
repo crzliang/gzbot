@@ -12,7 +12,8 @@ from .utils import (
     validate_command_prerequisites, 
     send_response, 
     log_command_result, 
-    log_database_error
+    log_database_error,
+    check_admin_permission
 )
 from .notifications import set_auto_broadcast_enabled, is_auto_broadcast_enabled
 
@@ -99,18 +100,17 @@ async def handle_help(bot: Bot, event: Event):
     help_text = """
 帮助文档
 
-可用命令：
+普通用户可用命令：
 • /help - 显示此帮助信息
 • /gc 或 /gamechallenges - 查看比赛题目列表
 • /rank - 查看排行榜
 • /rank-XX - 查看指定级别排行榜（如：/rank-25）
 
+管理员可用命令
 • /open - 开启自动播报(一血、二血、三血、上新题、题目加提示、赛事公告)
 • /close - 关闭自动播报(一血、二血、三血、上新题、题目加提示、赛事公告)
 
 注意：自动播报默认关闭，请使用 /open 开启，/close 关闭。
-
-如有问题，请联系管理员。
     """.strip()
     
     try:
@@ -122,10 +122,18 @@ async def handle_help(bot: Bot, event: Event):
 @open_broadcast.handle()
 async def handle_open_broadcast(bot: Bot, event: Event):
     """开启自动播报"""
+    # 检查管理员权限
+    if not check_admin_permission(event):
+        await send_response(bot, event, "权限不足，只有管理员才能执行此命令。", "open")
+        return
+    
     # 只做权限检查
     error_msg = await validate_command_prerequisites("open", event)
-    if error_msg == "PERMISSION_DENIED":
-        return
+    if error_msg:
+        if error_msg == "PERMISSION_DENIED":
+            return
+        await open_broadcast.finish(error_msg)
+    
     try:
         if is_auto_broadcast_enabled():
             await send_response(bot, event, "自动播报已是开启状态。", "open")
@@ -139,10 +147,18 @@ async def handle_open_broadcast(bot: Bot, event: Event):
 @close_broadcast.handle()
 async def handle_close_broadcast(bot: Bot, event: Event):
     """关闭自动播报"""
+    # 检查管理员权限
+    if not check_admin_permission(event):
+        await send_response(bot, event, "权限不足，只有管理员才能执行此命令。", "close")
+        return
+    
     # 只做权限检查
     error_msg = await validate_command_prerequisites("close", event)
-    if error_msg == "PERMISSION_DENIED":
-        return
+    if error_msg:
+        if error_msg == "PERMISSION_DENIED":
+            return
+        await close_broadcast.finish(error_msg)
+    
     try:
         if not is_auto_broadcast_enabled():
             await send_response(bot, event, "自动播报已是关闭状态。", "close")
