@@ -22,7 +22,7 @@ async def get_game_challenges(game_id: int):
     conn = await asyncpg.connect(POSTGRES_DSN)
     try:
         rows = await conn.fetch(
-            'SELECT "Title", "Category", "OriginalScore" FROM "GameChallenges" WHERE "GameId" = $1 ORDER BY "Id" DESC',
+            'SELECT "Title", "Category", "OriginalScore" FROM "GameChallenges" WHERE "GameId" = $1 AND "IsEnabled" = TRUE ORDER BY "Id" DESC',
             game_id
         )
         return rows
