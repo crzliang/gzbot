@@ -1,0 +1,29 @@
+services:
+  napcat:
+    image: mlikiowa/napcat-docker:latest
+    restart: always
+    ports:
+      - "6099:6099"
+    environment:
+      - "ACCOUNT=xxxx"  #机器人的qq号
+      - "WEBUI_TOKEN=xxxx"  #webui登录token
+      - "WEBUI_PREFIX=/webui"  #webui访问前缀
+      - "WSR_ENABLE=true"
+      - "WS_URLS=\"ws://bot:8988/onebot/v11/ws/\""
+    volumes:
+      - "./napcat/app:/usr/src/app/napcat"
+      - "./napcat/config:/app/napcat/config"
+    depends_on:
+      - bot
+
+  bot:
+    image: ghcr.io/crzliang/gzbot:latest
+    restart: always
+    environment:
+      - "POSTGRES_DSN=postgresql://postgres:xxxxx@ip/host:5432/xxxxx" #数据库连接
+      - "ALLOWED_GROUP_IDS=xxxx,xxxx"  #机器人服务的群号
+      - "TARGET_GAME_ID=xxxx"  #目标赛事id
+      - "ADMIN_QQ_IDS=xxxx,xxxx"  #机器人管理员qq号
+      - "ONEBOT_V11_ACCESS_TOKEN=xxxxx"  #onebot v11 接入token
+      - "DRIVER=nonebot.drivers.fastapi"  #驱动
+      - "TZ=Asia/Shanghai"  #时区
